@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: vitals
+    description: Tables written by the streaming pipeline into TimescaleDB
+    schema: public
+    tables:
+      - name: vitals_raw
+        description: Raw vital sign readings as produced by bedside monitors
+        loaded_at_field: time
+        freshness:
+          warn_after: {count: 5, period: minute}
+          error_after: {count: 30, period: minute}
+      - name: vitals_scored
+        description: Readings enriched with MEWS scores by the stream processor
+        loaded_at_field: time
+      - name: alerts
+        description: Clinical deterioration alerts (MEWS threshold + anomalies)
+        loaded_at_field: time

@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: stg_vitals_raw
+    description: Cleaned and type-cast raw vitals with per-parameter validity flags
+    columns:
+      - name: patient_id
+        tests: [not_null]
+      - name: reading_time
+        tests: [not_null]
+
+  - name: stg_vitals_scored
+    description: MEWS-scored readings with severity classification
+    columns:
+      - name: patient_id
+        tests: [not_null]
+      - name: mews_score
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+              quote: false
+      - name: severity
+        tests:
+          - accepted_values:
+              values: ['normal', 'warning', 'critical']
+
+  - name: stg_alerts
+    description: Cleaned alert records with time-to-acknowledge
+    columns:
+      - name: alert_id
+        tests: [not_null]
+      - name: severity
+        tests:
+          - accepted_values:
+              values: ['critical', 'warning', 'info']
+
+  - name: int_patient_sessions
+    description: Monitoring sessions (gap > 30 min starts a new session)
+    columns:
+      - name: patient_id
+        tests: [not_null]
+      - name: reading_count
+        tests: [not_null]
+
+  - name: int_vitals_hourly
+    description: Hourly aggregated vitals per patient
+
+  - name: mart_patient_summary
+    description: One row per patient for the patients API and dashboard
+    columns:
+      - name: patient_id
+        tests: [not_null, unique]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['normal', 'warning', 'critical']
+
+  - name: mart_unit_dashboard
+    description: Unit-level census, MEWS distribution, and alert rates
+    columns:
+      - name: unit
+        tests: [not_null, unique]
+
+  - name: mart_alert_analytics
+    description: Alert frequency, MEWS at alert time, acknowledgement latency

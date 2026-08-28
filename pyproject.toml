@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "SIM", "UP"]
+ignore = [
+    # long lines in SQL strings and clinical scoring tables read better unwrapped
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Query() in argument defaults is the canonical FastAPI dependency idiom
+"src/api/*" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true

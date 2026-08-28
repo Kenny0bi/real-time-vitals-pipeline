@@ -1,0 +1,13 @@
+# Copy to ~/.dbt/profiles.yml (or set DBT_PROFILES_DIR=./dbt)
+vitals_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      user: vitals
+      password: vitals_dev
+      dbname: patient_vitals
+      schema: analytics
+      threads: 4

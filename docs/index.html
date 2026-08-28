@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitals Telemetry Wall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ground: #05090d;
+  --panel: #0b1117;
+  --panel-2: #0e161e;
+  --edge: #182430;
+  --grid: rgba(110, 150, 185, 0.08);
+  --text: #b9cddb;
+  --dim: #58718a;
+  --faint: #35485c;
+  --hr: #2ef28f;
+  --spo2: #29d8f6;
+  --sbp: #ff6b57;
+  --dbp: #ffb14d;
+  --rr: #f5e04e;
+  --temp: #d98cf5;
+  --ok: #2ef28f;
+  --warn: #ffb300;
+  --crit: #ff2f54;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "IBM Plex Sans", -apple-system, system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  min-height: 100vh;
+}
+a { color: var(--spo2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------- header ---------- */
+header {
+  display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+  padding: 14px 22px 10px;
+  border-bottom: 1px solid var(--edge);
+}
+header h1 {
+  font-size: 15px; font-weight: 600; letter-spacing: .12em; margin: 0;
+  color: #e6f1f9; text-transform: uppercase;
+}
+header h1 .pulse { color: var(--hr); }
+.tag {
+  font-size: 10px; letter-spacing: .14em; padding: 2px 8px;
+  border: 1px solid var(--warn); color: var(--warn); border-radius: 2px;
+}
+#clock { color: var(--dim); margin-left: auto; font-size: 12px; }
+.census { display: flex; gap: 14px; font-size: 11px; color: var(--dim); }
+.census b { font-weight: 600; }
+.census .c-ok b { color: var(--ok); }
+.census .c-warn b { color: var(--warn); }
+.census .c-crit b { color: var(--crit); }
+
+/* ---------- layout ---------- */
+main { display: grid; grid-template-columns: 1fr 292px; gap: 0; }
+@media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+#wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
+  gap: 10px; padding: 14px 14px 24px 22px;
+  align-content: start;
+}
+
+/* ---------- patient tile ---------- */
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-left: 3px solid var(--ok);
+  border-radius: 3px;
+  padding: 8px 10px 9px;
+  cursor: pointer;
+  transition: background .15s;
+  position: relative;
+}
+.tile:hover { background: var(--panel-2); }
+.tile.warn { border-left-color: var(--warn); }
+.tile.crit { border-left-color: var(--crit); }
+.tile.crit.blink { animation: alarm 1.1s steps(2, jump-none) infinite; }
+@keyframes alarm {
+  0% { box-shadow: inset 0 0 0 1px rgba(255,47,84,.55), 0 0 14px rgba(255,47,84,.18); }
+  100% { box-shadow: none; }
+}
+.tile-head { display: flex; align-items: baseline; gap: 8px; }
+.tile-head .pid { color: #e6f1f9; font-weight: 600; font-size: 12.5px; }
+.tile-head .bed { color: var(--faint); font-size: 10px; letter-spacing: .06em; }
+.tile-head .mews {
+  margin-left: auto; font-size: 11px; color: var(--dim);
+}
+.tile-head .mews b { font-size: 15px; color: var(--ok); }
+.tile.warn .tile-head .mews b { color: var(--warn); }
+.tile.crit .tile-head .mews b { color: var(--crit); }
+.tile canvas.ecg { width: 100%; height: 44px; display: block; margin: 5px 0 4px; }
+.tile-nums {
+  display: grid; grid-template-columns: 1fr 1fr 1.4fr 1fr 1fr 38px;
+  gap: 2px; font-size: 10px; color: var(--faint); text-align: left;
+  align-items: end;
+}
+.tile-nums div span { display: block; font-size: 13px; font-weight: 500; }
+.tn-hr span { color: var(--hr); } .tn-spo2 span { color: var(--spo2); }
+.tn-bp span { color: var(--sbp); } .tn-rr span { color: var(--rr); }
+.tn-temp span { color: var(--temp); }
+.rose-holder { justify-self: end; }
+
+/* ---------- side rail ---------- */
+#rail {
+  border-left: 1px solid var(--edge);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 14px;
+  min-height: 0;
+}
+@media (max-width: 980px) { #rail { border-left: none; border-top: 1px solid var(--edge); } }
+#rail h2 {
+  margin: 0; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--dim); font-weight: 600;
+}
+#legend { background: var(--panel); border: 1px solid var(--edge); border-radius: 3px; padding: 10px 12px; }
+#legend p { margin: 6px 0; font-size: 11px; line-height: 1.55; color: var(--dim); }
+#legend p b { color: var(--text); font-weight: 500; }
+.legend-rose { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+.legend-rose svg { flex: 0 0 auto; }
+.legend-rose .cap { font-size: 10.5px; color: var(--dim); line-height: 1.5; }
+.lk { display: inline-block; width: 8px; height: 8px; border-radius: 1px; margin-right: 5px; vertical-align: -1px; }
+
+#feed { flex: 1; min-height: 180px; display: flex; flex-direction: column; }
+#feed-list {
+  flex: 1; overflow-y: auto; max-height: 46vh;
+  display: flex; flex-direction: column; gap: 5px; margin-top: 8px;
+  scrollbar-width: thin; scrollbar-color: var(--edge) transparent;
+}
+.evt {
+  border-left: 2px solid var(--warn);
+  background: var(--panel);
+  padding: 5px 8px; font-size: 10.5px; line-height: 1.45;
+  color: var(--dim); border-radius: 0 2px 2px 0;
+  cursor: pointer;
+}
+.evt b { color: var(--text); font-weight: 500; }
+.evt.crit { border-left-color: var(--crit); }
+.evt.crit b { color: var(--crit); }
+.evt time { color: var(--faint); float: right; }
+#feed-empty { color: var(--faint); font-size: 11px; margin-top: 10px; }
+
+footer {
+  border-top: 1px solid var(--edge);
+  padding: 10px 22px; color: var(--faint); font-size: 10.5px;
+  display: flex; gap: 18px; flex-wrap: wrap;
+}
+
+/* ---------- detail overlay ---------- */
+#overlay {
+  position: fixed; inset: 0; background: rgba(3, 6, 9, .82);
+  display: none; align-items: flex-start; justify-content: center;
+  padding: 4vh 16px; z-index: 50; overflow-y: auto;
+}
+#overlay.open { display: flex; }
+#detail {
+  width: min(860px, 100%);
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 4px;
+  padding: 16px 20px 20px;
+}
+#detail .d-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+#detail .d-head .pid { font-size: 17px; font-weight: 600; color: #e6f1f9; }
+#detail .d-head .traj { font-size: 11px; color: var(--dim); letter-spacing: .08em; }
+#detail .d-head .close {
+  margin-left: auto; cursor: pointer; color: var(--dim); font-size: 13px;
+  border: 1px solid var(--edge); padding: 3px 10px; border-radius: 2px;
+}
+#detail .d-head .close:hover { color: var(--text); }
+.d-mews { display: flex; align-items: center; gap: 18px; margin: 12px 0 4px; flex-wrap: wrap; }
+.d-mews .big { font-size: 34px; font-weight: 600; }
+.d-mews .big small { font-size: 12px; color: var(--dim); font-weight: 400; display: block; letter-spacing: .1em; }
+.d-mews table { border-collapse: collapse; font-size: 11px; }
+.d-mews td { padding: 2px 10px 2px 0; color: var(--dim); }
+.d-mews td.v { color: var(--text); }
+.d-mews td.s { font-weight: 600; }
+#detail h3 {
+  font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--dim); font-weight: 600; margin: 18px 0 6px;
+}
+#detail canvas { width: 100%; display: block; background: var(--panel-2); border: 1px solid var(--edge); border-radius: 2px; }
+#d-ecg { height: 90px; }
+#d-mewsstrip { height: 110px; }
+#d-trends { height: 150px; }
+#d-alerts { max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+
+/* ---------- intro ---------- */
+#intro {
+  margin: 14px 22px 0; padding: 12px 16px;
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 3px;
+  font-size: 12px; line-height: 1.65; color: var(--dim);
+  font-family: var(--sans);
+}
+#intro b { color: var(--text); font-weight: 600; }
+#intro .dismiss { float: right; cursor: pointer; color: var(--faint); font-family: var(--mono); }
+#intro .dismiss:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="pulse">▚</span> Vitals Telemetry Wall</h1>
+  <span class="tag">SIMULATED PATIENTS</span>
+  <div class="census">
+    <span class="c-ok"><b id="n-ok">0</b> stable</span>
+    <span class="c-warn"><b id="n-warn">0</b> watch</span>
+    <span class="c-crit"><b id="n-crit">0</b> critical</span>
+  </div>
+  <div id="clock"></div>
+</header>
+
+<div id="intro">
+  <span class="dismiss" onclick="this.parentElement.style.display='none'">✕ dismiss</span>
+  <b>This is the front end of a Kafka + Spark streaming pipeline, running its
+  simulator directly in your browser.</b> Twelve synthetic patients stream
+  vital signs once per second. Each reading is scored with the Modified Early
+  Warning Score (MEWS): 0&ndash;3 points per parameter, and a total of 5 or more
+  means immediate clinical review. Some of these patients are quietly
+  deteriorating (sepsis, respiratory failure, cardiac instability); watch the
+  wall long enough and you will see tiles turn amber, then red. Click any
+  patient for their rhythm strip and score history. The production pipeline
+  does exactly this at scale: simulator &rarr; Kafka &rarr; stream processor &rarr;
+  TimescaleDB &rarr; API &rarr; dashboard.
+  <a href="https://github.com/Kenny0bi/real-time-vitals-pipeline">Source on GitHub</a>.
+</div>
+
+<main>
+  <section id="wall" aria-label="patient monitor wall"></section>
+
+  <aside id="rail">
+    <div id="legend">
+      <h2>How to read a tile</h2>
+      <p><span class="lk" style="background:var(--hr)"></span><b>HR</b> beats/min &nbsp;
+         <span class="lk" style="background:var(--spo2)"></span><b>SpO2</b> % &nbsp;
+         <span class="lk" style="background:var(--sbp)"></span><b>BP</b> mmHg</p>
+      <p><span class="lk" style="background:var(--rr)"></span><b>RR</b> breaths/min &nbsp;
+         <span class="lk" style="background:var(--temp)"></span><b>T</b> &deg;C</p>
+      <p>The trace is a synthesized ECG lead sweeping at the patient's current
+         heart rate, refreshed the way a real bedside monitor refreshes:
+         a moving erase bar, not a scrolling window.</p>
+      <div class="legend-rose">
+        <svg id="legend-rose-svg" width="84" height="84" viewBox="0 0 64 64"></svg>
+        <div class="cap">
+          The five-spoke glyph is the patient's <b style="color:var(--text)">MEWS
+          rose</b>: one spoke per scored parameter (HR, systolic BP, RR,
+          temperature, consciousness), one filled notch per point. A bare
+          center is a well patient; a full bloom is a MEWS of 15.
+        </div>
+      </div>
+    </div>
+
+    <div id="feed">
+      <h2>Alert feed</h2>
+      <div id="feed-list"></div>
+      <div id="feed-empty">No alerts yet. The deteriorating patients need a
+        few minutes to cross their thresholds.</div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span>MEWS &ge; 5 &rarr; critical review</span>
+  <span>MEWS 3&ndash;4 &rarr; increased observation</span>
+  <span>Subbe et al. 2001, QJM</span>
+  <span style="margin-left:auto">All data synthetic. No real patients.</span>
+</footer>
+
+<div id="overlay">
+  <div id="detail">
+    <div class="d-head">
+      <span class="pid" id="d-pid"></span>
+      <span class="traj" id="d-traj"></span>
+      <span class="close" onclick="closeDetail()">esc / close</span>
+    </div>
+    <div class="d-mews">
+      <div class="big" id="d-mews-big">0<small>MEWS</small></div>
+      <svg id="d-rose" width="84" height="84" viewBox="0 0 64 64"></svg>
+      <table id="d-breakdown"></table>
+    </div>
+    <h3>ECG lead II (synthesized)</h3>
+    <canvas id="d-ecg"></canvas>
+    <h3>MEWS rhythm strip, last 10 minutes</h3>
+    <canvas id="d-mewsstrip"></canvas>
+    <h3>Vital sign trends</h3>
+    <canvas id="d-trends"></canvas>
+    <h3>Alerts for this patient</h3>
+    <div id="d-alerts"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   The browser edition of the pipeline: the same simulator, MEWS
+   calculator, and anomaly logic that run in Python in src/, ported to
+   JS so the project is demo-able with zero installs.
+   ===================================================================== */
+
+// ---------- seeded RNG (mulberry32) so every visit tells a coherent story ----------
+function rng(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const R = rng(20260828);
+function gauss(r) { // Box-Muller
+  let u = 0, v = 0;
+  while (u === 0) u = r(); while (v === 0) v = r();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// ---------- MEWS calculator (mirror of src/processing/mews_calculator.py) ----------
+function mewsHR(hr) {
+  if (hr >= 130) return 3; if (hr >= 111) return 2; if (hr >= 101) return 1;
+  if (hr >= 51) return 0; if (hr >= 41) return 1; return 2;
+}
+function mewsSBP(s) {
+  if (s >= 200) return 2; if (s >= 101) return 0; if (s >= 81) return 1;
+  if (s >= 71) return 2; return 3;
+}
+function mewsRR(rr) {
+  if (rr >= 30) return 3; if (rr >= 21) return 2; if (rr >= 15) return 1;
+  if (rr >= 9) return 0; return 2;
+}
+function mewsTemp(t) { if (t >= 38.5) return 2; if (t >= 35) return 0; return 2; }
+function mewsAVPU(a) { return { A: 0, V: 1, P: 2, U: 3 }[a] ?? 0; }
+function calcMEWS(v) {
+  const parts = {
+    hr: mewsHR(v.hr), sbp: mewsSBP(v.sbp), rr: mewsRR(v.rr),
+    temp: mewsTemp(v.temp), avpu: mewsAVPU(v.avpu),
+  };
+  parts.total = parts.hr + parts.sbp + parts.rr + parts.temp + parts.avpu;
+  return parts;
+}
+function severity(total) { return total >= 5 ? "crit" : total >= 3 ? "warn" : "ok"; }
+
+// ---------- patient simulator (mirror of src/ingestion/vitals_simulator.py) ----------
+const TRAJ = {
+  none:       { label: "stable" },
+  sepsis:     { label: "sepsis pattern",
+                shift: (r) => ({ hr: r * .8, sbp: -r * .6, temp: r * .03, rr: r * .4, spo2: -r * .1, dbp: -r * .3 }) },
+  respiratory:{ label: "respiratory failure pattern",
+                shift: (r) => ({ spo2: -r * .5, rr: r * .6, hr: r * .4, sbp: -r * .2, temp: r * .01, dbp: -r * .1 }) },
+  cardiac:    { label: "cardiac instability pattern",
+                shift: (r, t) => ({ hr: r * (1 + .5 * Math.sin(t * .3)), sbp: -r * .7, spo2: -r * .3, dbp: -r * .4, rr: r * .2, temp: 0 }) },
+};
+const NOISE = { hr: 2.2, sbp: 4, dbp: 2.5, rr: 1.1, spo2: .35, temp: .1 };
+const UNITS = ["ICU-2A", "ICU-2A", "ICU-2B", "ICU-2B", "CCU-1", "CCU-1"];
+const HISTORY = 600;          // readings kept per patient (10 min at 1/s)
+
+// A deliberately mixed ward: mostly stable, four quiet deteriorations at
+// different stages of their arc so the wall is alive from the first minute:
+// one already critical, one at the warning line, one approaching it, one
+// whose story has barely started.
+const CAST = [
+  { traj: "none" },      { traj: "sepsis", rate: .050, warm: 800 },
+  { traj: "none" },      { traj: "none" },
+  { traj: "respiratory", rate: .045, warm: 660 }, { traj: "none" },
+  { traj: "cardiac", rate: .055, warm: 450 },     { traj: "none" },
+  { traj: "none" },      { traj: "sepsis", rate: .035, warm: 120 },
+  { traj: "none" },      { traj: "none" },
+];
+
+function makePatient(i, spec) {
+  const p = {
+    id: "PT-" + String(i + 1).padStart(5, "0"),
+    bed: "BED " + String(i + 1).padStart(2, "0"),
+    unit: UNITS[i % UNITS.length],
+    traj: spec.traj, rate: spec.rate || 0,
+    t: spec.warm || 0,             // pre-aged so stories are mid-arc
+    base: {
+      hr: 62 + R() * 34, sbp: 112 + R() * 26, dbp: 62 + R() * 24,
+      rr: 12 + R() * 7, spo2: 96 + R() * 3.5, temp: 36.2 + R() * .9,
+    },
+    hist: [],                      // ring of {v, mews} readings
+    alerted: false,                // MEWS-threshold latch (re-arms below 5)
+    phase: R() * Math.PI * 2,      // ECG phase offset
+  };
+  return p;
+}
+
+function step(p) {
+  p.t += 1;
+  const v = {};
+  const shift = p.traj !== "none" ? TRAJ[p.traj].shift(p.rate * p.t, p.t) : {};
+  for (const k of ["hr", "sbp", "dbp", "rr", "spo2", "temp"]) {
+    v[k] = p.base[k] + gauss(R) * NOISE[k] + (shift[k] || 0);
+  }
+  v.hr = Math.min(300, Math.max(20, v.hr));
+  v.sbp = Math.min(300, Math.max(30, v.sbp));
+  v.dbp = Math.min(200, Math.max(20, Math.min(v.dbp, v.sbp - 12)));
+  v.rr = Math.min(60, Math.max(4, v.rr));
+  v.spo2 = Math.min(100, Math.max(50, v.spo2));
+  v.temp = Math.min(45, Math.max(30, v.temp));
+  // consciousness degrades only late in a deterioration arc
+  v.avpu = "A";
+  if (p.traj !== "none" && p.rate * p.t > 32) {
+    const roll = R();
+    v.avpu = roll < .72 ? "A" : roll < .9 ? "V" : roll < .98 ? "P" : "U";
+  }
+  const mews = calcMEWS(v);
+  p.hist.push({ v, mews });
+  if (p.hist.length > HISTORY) p.hist.shift();
+  return { v, mews };
+}
+
+// ---------- alert engine: debounced threshold with slow re-arm ----------
+// Scores wobble around thresholds reading to reading; a real alarm needs
+// 3 consecutive readings over the line to fire and 20 under it to re-arm,
+// or the feed becomes noise.
+const feed = [];
+function checkAlerts(p, v, mews) {
+  p.above5 = mews.total >= 5 ? (p.above5 || 0) + 1 : 0;
+  p.below5 = mews.total < 5 ? (p.below5 || 0) + 1 : 0;
+  if (p.above5 === 3 && !p.alerted) {
+    p.alerted = true;
+    pushAlert({
+      sev: "crit", pid: p.id,
+      msg: `MEWS ${mews.total} — immediate review (HR ${v.hr.toFixed(0)}, ` +
+           `SBP ${v.sbp.toFixed(0)}, RR ${v.rr.toFixed(0)}, ` +
+           `T ${v.temp.toFixed(1)}, ${v.avpu})`,
+    });
+  } else if (p.below5 >= 20 && p.alerted) {
+    p.alerted = false; // re-arm
+  }
+  p.above3 = mews.total >= 3 && mews.total < 5 ? (p.above3 || 0) + 1 : 0;
+  if (p.above3 === 3 && !p.warnLatch) {
+    p.warnLatch = true;
+    pushAlert({ sev: "warn", pid: p.id, msg: `MEWS ${mews.total} — increase observation frequency` });
+  } else if (mews.total < 3 && (p.below3 = (p.below3 || 0) + 1) >= 30) {
+    p.warnLatch = false; p.below3 = 0;
+  }
+}
+function pushAlert(a) {
+  a.time = new Date();
+  feed.unshift(a);
+  if (feed.length > 60) feed.pop();
+  renderFeed();
+}
+
+// ---------- MEWS rose glyph (SVG) ----------
+const ROSE_SPOKES = [
+  { key: "hr", color: "var(--hr)" }, { key: "sbp", color: "var(--sbp)" },
+  { key: "rr", color: "var(--rr)" }, { key: "temp", color: "var(--temp)" },
+  { key: "avpu", color: "#9fb6c9" },
+];
+function roseSVG(svg, mews, size) {
+  const c = size / 2, step = 6.5, r0 = 4.5;
+  let out = `<circle cx="${c}" cy="${c}" r="2" fill="${mews.total >= 5 ? "var(--crit)" : mews.total >= 3 ? "var(--warn)" : "var(--faint)"}"/>`;
+  ROSE_SPOKES.forEach((sp, i) => {
+    const ang = -Math.PI / 2 + i * (2 * Math.PI / 5);
+    for (let notch = 1; notch <= 3; notch++) {
+      const r1 = r0 + (notch - 1) * step, r2 = r1 + step - 1.8;
+      const filled = mews[sp.key] >= notch;
+      const x1 = c + Math.cos(ang) * r1, y1 = c + Math.sin(ang) * r1;
+      const x2 = c + Math.cos(ang) * r2, y2 = c + Math.sin(ang) * r2;
+      out += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+        stroke="${filled ? sp.color : "rgba(100,135,168,.3)"}" stroke-width="${filled ? 3 : 1.3}" stroke-linecap="round"/>`;
+    }
+  });
+  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.innerHTML = out;
+}
+
+// ---------- ECG synthesis ----------
+// One idealized P-QRS-T complex sampled by phase in [0,1)
+function ecgSample(phase) {
+  function bump(ph, center, width, amp) {
+    const d = (ph - center) / width;
+    return amp * Math.exp(-d * d);
+  }
+  let y = 0;
+  y += bump(phase, 0.10, 0.030, 0.16);   // P
+  y += bump(phase, 0.235, 0.011, -0.12); // Q
+  y += bump(phase, 0.255, 0.013, 1.0);   // R
+  y += bump(phase, 0.28, 0.011, -0.22);  // S
+  y += bump(phase, 0.45, 0.055, 0.28);   // T
+  return y;
+}
+
+// Sweep-bar renderer: each tile owns a canvas and an x cursor.
+function makeSweep(canvas, colorVar) {
+  const ctx = canvas.getContext("2d");
+  let x = 0, lastY = null, inited = false;
+  function resize() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== w * 2 || canvas.height !== h * 2) {
+      canvas.width = w * 2; canvas.height = h * 2;
+      ctx.setTransform(2, 0, 0, 2, 0, 0);
+      inited = false;
+    }
+  }
+  function ground() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--panel-2");
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue("--grid");
+    ctx.lineWidth = 1;
+    for (let gx = 0; gx < w; gx += 16) {
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+    }
+    inited = true;
+  }
+  return function draw(patient, dtMs) {
+    resize();
+    if (!inited) ground();
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const last = patient.hist[patient.hist.length - 1];
+    if (!last) return;
+    const hr = last.v.hr;
+    const pxPerSec = 30;                       // sweep speed
+    const dx = Math.max(1, pxPerSec * dtMs / 1000);
+    const beatsPerSec = hr / 60;
+    // erratic RR interval for the cardiac patient once unstable
+    let jitter = 0;
+    if (patient.traj === "cardiac" && patient.rate * patient.t > 8) {
+      jitter = 0.25 * Math.sin(patient.t * 1.7 + patient.phase);
+    }
+    for (let i = 0; i < dx; i++) {
+      const time = (x + i) / pxPerSec;
+      const phase = ((time * beatsPerSec * (1 + jitter)) + patient.phase) % 1;
+      const amp = h * 0.32;
+      const y = h * 0.62 - ecgSample(phase) * amp;
+      // erase bar ahead of the pen
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--panel-2");
+      ctx.fillRect(((x + i) + 3) % w, 0, 5, h);
+      ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue(colorVar);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      const px = (x + i) % w;
+      if (lastY === null || px === 0) { ctx.moveTo(px, y); }
+      else { ctx.moveTo(px - 1, lastY); ctx.lineTo(px, y); }
+      ctx.stroke();
+      lastY = y;
+    }
+    x = (x + Math.floor(dx)) % w;
+  };
+}
+
+// ---------- wall construction ----------
+const patients = CAST.map((spec, i) => makePatient(i, spec));
+const wall = document.getElementById("wall");
+const tiles = patients.map((p) => {
+  const el = document.createElement("div");
+  el.className = "tile";
+  el.innerHTML = `
+    <div class="tile-head">
+      <span class="pid">${p.id}</span><span class="bed">${p.bed} · ${p.unit}</span>
+      <span class="mews">MEWS <b>0</b></span>
+    </div>
+    <canvas class="ecg"></canvas>
+    <div class="tile-nums">
+      <div class="tn-hr">HR<span>—</span></div>
+      <div class="tn-spo2">SpO2<span>—</span></div>
+      <div class="tn-bp">BP<span>—</span></div>
+      <div class="tn-rr">RR<span>—</span></div>
+      <div class="tn-temp">T<span>—</span></div>
+      <div class="rose-holder"><svg width="36" height="36"></svg></div>
+    </div>`;
+  el.addEventListener("click", () => openDetail(p));
+  wall.appendChild(el);
+  return {
+    el,
+    mews: el.querySelector(".mews b"),
+    nums: {
+      hr: el.querySelector(".tn-hr span"), spo2: el.querySelector(".tn-spo2 span"),
+      bp: el.querySelector(".tn-bp span"), rr: el.querySelector(".tn-rr span"),
+      temp: el.querySelector(".tn-temp span"),
+    },
+    rose: el.querySelector(".rose-holder svg"),
+    sweep: makeSweep(el.querySelector("canvas"), "--hr"),
+  };
+});
+
+// Pre-warm: replay the last 6 minutes of each patient's back-story so
+// every chart opens with history instead of a blank strip.
+patients.forEach((p) => {
+  p.t = Math.max(0, p.t - 360);
+  for (let i = 0; i < 360; i++) step(p);
+});
+
+// ---------- render loop ----------
+function fmt(v, digits = 0) { return v == null ? "—" : v.toFixed(digits); }
+
+function renderTile(i) {
+  const p = patients[i], t = tiles[i];
+  const last = p.hist[p.hist.length - 1];
+  if (!last) return;
+  const { v, mews } = last;
+  t.nums.hr.textContent = fmt(v.hr);
+  t.nums.spo2.textContent = fmt(v.spo2);
+  t.nums.bp.textContent = `${fmt(v.sbp)}/${fmt(v.dbp)}`;
+  t.nums.rr.textContent = fmt(v.rr);
+  t.nums.temp.textContent = fmt(v.temp, 1);
+  t.mews.textContent = mews.total;
+  const sev = severity(mews.total);
+  t.el.classList.toggle("warn", sev === "warn");
+  t.el.classList.toggle("crit", sev === "crit");
+  t.el.classList.toggle("blink", sev === "crit");
+  roseSVG(t.rose, mews, 40);
+}
+
+function renderCensus() {
+  let ok = 0, warn = 0, crit = 0;
+  patients.forEach((p) => {
+    const last = p.hist[p.hist.length - 1];
+    if (!last) return;
+    const s = severity(last.mews.total);
+    if (s === "ok") ok++; else if (s === "warn") warn++; else crit++;
+  });
+  document.getElementById("n-ok").textContent = ok;
+  document.getElementById("n-warn").textContent = warn;
+  document.getElementById("n-crit").textContent = crit;
+}
+
+function renderFeed() {
+  const list = document.getElementById("feed-list");
+  document.getElementById("feed-empty").style.display = feed.length ? "none" : "block";
+  list.innerHTML = feed.map((a, i) => `
+    <div class="evt ${a.sev}" data-i="${i}">
+      <time>${a.time.toTimeString().slice(0, 8)}</time>
+      <b>${a.pid}</b> ${a.msg}
+    </div>`).join("");
+  list.querySelectorAll(".evt").forEach((el) => {
+    el.addEventListener("click", () => {
+      const a = feed[+el.dataset.i];
+      const p = patients.find((x) => x.id === a.pid);
+      if (p) openDetail(p);
+    });
+  });
+}
+
+// one simulated reading per second
+setInterval(() => {
+  patients.forEach((p) => {
+    const { v, mews } = step(p);
+    checkAlerts(p, v, mews);
+  });
+  patients.forEach((_, i) => renderTile(i));
+  renderCensus();
+  if (openPatient) renderDetailData(openPatient);
+}, 1000);
+
+// waveforms at animation rate
+let lastFrame = performance.now();
+function frame(now) {
+  const dt = Math.min(100, now - lastFrame);
+  lastFrame = now;
+  tiles.forEach((t, i) => t.sweep(patients[i], dt));
+  if (openPatient) detailSweep(openPatient, dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+setInterval(() => {
+  document.getElementById("clock").textContent =
+    new Date().toTimeString().slice(0, 8) + " · refresh 1 Hz";
+}, 500);
+
+// ---------- legend rose: a worked example (MEWS 6) ----------
+roseSVG(document.getElementById("legend-rose-svg"),
+        { hr: 2, sbp: 1, rr: 2, temp: 0, avpu: 1, total: 6 }, 64);
+
+// ---------- detail overlay ----------
+let openPatient = null;
+const detailSweep = (() => {
+  const draw = makeSweep(document.getElementById("d-ecg"), "--hr");
+  return (p, dt) => draw(p, dt);
+})();
+
+function openDetail(p) {
+  openPatient = p;
+  document.getElementById("overlay").classList.add("open");
+  document.getElementById("d-pid").textContent = `${p.id} · ${p.bed} · ${p.unit}`;
+  document.getElementById("d-traj").textContent =
+    p.traj === "none" ? "no deterioration trajectory"
+                      : "simulated " + TRAJ[p.traj].label;
+  renderDetailData(p);
+}
+function closeDetail() {
+  openPatient = null;
+  document.getElementById("overlay").classList.remove("open");
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDetail(); });
+document.getElementById("overlay").addEventListener("click", (e) => {
+  if (e.target.id === "overlay") closeDetail();
+});
+
+const PARAM_ROWS = [
+  ["Heart rate", "hr", (v) => fmt(v.hr) + " bpm", "hr"],
+  ["Systolic BP", "sbp", (v) => fmt(v.sbp) + " mmHg", "sbp"],
+  ["Resp rate", "rr", (v) => fmt(v.rr) + " /min", "rr"],
+  ["Temperature", "temp", (v) => fmt(v.temp, 1) + " °C", "temp"],
+  ["Consciousness", "avpu", (v) => ({A:"Alert",V:"Voice",P:"Pain",U:"Unresponsive"})[v.avpu], null],
+];
+
+function renderDetailData(p) {
+  const last = p.hist[p.hist.length - 1];
+  if (!last) return;
+  const { v, mews } = last;
+  const sevColor = { ok: "var(--ok)", warn: "var(--warn)", crit: "var(--crit)" }[severity(mews.total)];
+  const big = document.getElementById("d-mews-big");
+  big.firstChild.textContent = mews.total;
+  big.style.color = sevColor;
+  roseSVG(document.getElementById("d-rose"), mews, 64);
+  document.getElementById("d-breakdown").innerHTML = PARAM_ROWS.map(([label, key, fmtFn]) => `
+    <tr><td>${label}</td><td class="v">${fmtFn(v)}</td>
+        <td class="s" style="color:${mews[key] ? "var(--warn)" : "var(--faint)"}">+${mews[key]}</td></tr>`
+  ).join("");
+  drawMEWSStrip(p);
+  drawTrends(p);
+  document.getElementById("d-alerts").innerHTML =
+    feed.filter((a) => a.pid === p.id).map((a) => `
+      <div class="evt ${a.sev}"><time>${a.time.toTimeString().slice(0, 8)}</time><b>${a.pid}</b> ${a.msg}</div>`
+    ).join("") || `<div id="feed-empty" style="display:block">No alerts for this patient.</div>`;
+}
+
+function setupCanvas(id) {
+  const canvas = document.getElementById(id);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * 2; canvas.height = h * 2;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(2, 0, 0, 2, 0, 0);
+  return { ctx, w, h };
+}
+
+// stepped MEWS score over history, with observation/critical bands
+function drawMEWSStrip(p) {
+  const { ctx, w, h } = setupCanvas("d-mewsstrip");
+  const css = (v) => getComputedStyle(document.body).getPropertyValue(v);
+  ctx.fillStyle = css("--panel-2"); ctx.fillRect(0, 0, w, h);
+  const maxScore = 10, pad = 18;
+  const yOf = (s) => h - 14 - (Math.min(s, maxScore) / maxScore) * (h - 26);
+  // alarm bands
+  ctx.fillStyle = "rgba(255,179,0,.06)";
+  ctx.fillRect(0, yOf(5), w, yOf(3) - yOf(5));
+  ctx.fillStyle = "rgba(255,47,84,.08)";
+  ctx.fillRect(0, yOf(maxScore), w, yOf(5) - yOf(maxScore));
+  ctx.strokeStyle = "rgba(255,179,0,.4)"; ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.moveTo(0, yOf(3)); ctx.lineTo(w, yOf(3)); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,47,84,.5)";
+  ctx.beginPath(); ctx.moveTo(0, yOf(5)); ctx.lineTo(w, yOf(5)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = css("--faint"); ctx.font = "9px " + css("--mono");
+  ctx.fillText("3 watch", 4, yOf(3) - 3);
+  ctx.fillText("5 critical", 4, yOf(5) - 3);
+  // stepped trace
+  const hist = p.hist;
+  if (hist.length < 2) return;
+  const dx = (w - pad) / (HISTORY - 1);
+  const x0 = w - pad - (hist.length - 1) * dx;
+  ctx.strokeStyle = "#dfe9f2"; ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  hist.forEach((rec, i) => {
+    const x = x0 + i * dx, y = yOf(rec.mews.total);
+    if (i === 0) ctx.moveTo(x, y);
+    else { ctx.lineTo(x, yOf(hist[i - 1].mews.total)); ctx.lineTo(x, y); }
+  });
+  ctx.stroke();
+  // current value marker
+  const lastRec = hist[hist.length - 1];
+  const sev = severity(lastRec.mews.total);
+  ctx.fillStyle = css(sev === "ok" ? "--ok" : sev === "warn" ? "--warn" : "--crit");
+  ctx.beginPath();
+  ctx.arc(w - pad, yOf(lastRec.mews.total), 3, 0, Math.PI * 2); ctx.fill();
+}
+
+// small-multiple trend lanes, one per channel, each in its own color
+function drawTrends(p) {
+  const { ctx, w, h } = setupCanvas("d-trends");
+  const css = (v) => getComputedStyle(document.body).getPropertyValue(v);
+  ctx.fillStyle = css("--panel-2"); ctx.fillRect(0, 0, w, h);
+  const lanes = [
+    ["HR", "hr", "--hr"], ["SpO2", "spo2", "--spo2"], ["SBP", "sbp", "--sbp"],
+    ["RR", "rr", "--rr"], ["T", "temp", "--temp"],
+  ];
+  const laneH = h / lanes.length;
+  const hist = p.hist;
+  if (hist.length < 2) return;
+  lanes.forEach(([label, key, colorVar], li) => {
+    const vals = hist.map((r) => r.v[key]);
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const y0 = li * laneH + 6, y1 = (li + 1) * laneH - 6;
+    const yOf = (val) => hi === lo ? (y0 + y1) / 2 : y1 - ((val - lo) / (hi - lo)) * (y1 - y0);
+    const dx = (w - 74) / (HISTORY - 1);
+    const x0 = w - 12 - (vals.length - 1) * dx;
+    ctx.strokeStyle = css(colorVar); ctx.lineWidth = 1.1; ctx.globalAlpha = .9;
+    ctx.beginPath();
+    vals.forEach((val, i) => {
+      const x = x0 + i * dx;
+      if (i === 0) ctx.moveTo(x, yOf(val)); else ctx.lineTo(x, yOf(val));
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = css(colorVar); ctx.font = "10px " + css("--mono");
+    ctx.fillText(`${label} ${vals[vals.length - 1].toFixed(key === "temp" ? 1 : 0)}`, 6, (y0 + y1) / 2 + 3);
+    ctx.fillStyle = css("--faint"); ctx.font = "8.5px " + css("--mono");
+    ctx.fillText(`${lo.toFixed(0)}–${hi.toFixed(0)}`, 6, (y0 + y1) / 2 + 14);
+  });
+}
+
+// deep link: ?open=N opens patient N's detail view on load
+{
+  const n = new URLSearchParams(location.search).get("open");
+  if (n !== null && patients[+n - 1]) openDetail(patients[+n - 1]);
+}
+</script>
+</body>
+</html>
